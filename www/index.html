@@ -45,7 +45,7 @@ input[type=text],input[type=file],input[type=date],select{width:100%;font-size:1
 .btn{width:100%;border:0;background:#2f6fed;color:#fff;padding:12px;border-radius:8px;font-size:15px;font-weight:600;margin-top:10px}
 .btn:disabled{opacity:.6}
 .btn-danger{background:#fff;color:#e5484d;border:1px solid #e5484d}
-.btn-loadmore{background:#f0f0f0;color:#555;margin-top:10px;padding:10px;font-size:14px}
+.btn-loadmore{background:#fff;color:#2f6fed;border:1px solid #2f6fed;margin-top:10px;padding:10px;font-size:14px;border-radius:8px;width:100%}
 
 /* 映射区域 */
 #mapping-area{background:#f8f9fa;border:1px dashed #ccc;border-radius:12px;padding:12px;margin-bottom:12px}
@@ -119,7 +119,7 @@ input[type=text],input[type=file],input[type=date],select{width:100%;font-size:1
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid #eee;margin-bottom:12px;">
         <span style="font-weight:600">当前版本</span>
-        <span style="color:#2f6fed;font-size:15px;font-weight:bold;">v1.1.0 (防卡顿重构版)</span>
+        <span style="color:#2f6fed;font-size:15px;font-weight:bold;">v1.2.0 (最终正式版)</span>
       </div>
     </div>
 
@@ -152,14 +152,14 @@ input[type=text],input[type=file],input[type=date],select{width:100%;font-size:1
 <script>
 let excelData = null; 
 let currentParsedData = null; 
-let taskList = []; // 缓存数据，避免频繁读localStorage
+let taskList = []; // 缓存任务数据
 
-// 分页限制配置（防止DOM节点过多卡死）
+// ===== 分页限制配置 =====
 const PAGE_SIZE = 50;
-const pageState = { today: 1, future: 1, history: 1 };
+let pageState = { today: 1, future: 1, history: 1 };
 let filteredTasks = { today: [], future: [], history: [] };
 
-// ========== 核心渲染与切换 ==========
+// ===== 导航切换 =====
 function switchTab(tabId, navId, title) {
   try {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -174,13 +174,12 @@ function switchTab(tabId, navId, title) {
     document.getElementById('app-title').textContent = title;
 
     if(tabId === 'tab-today' || tabId === 'tab-history') {
-      renderTasks(true); // 切换时重置分页
+      renderTasks(true); // 切换时重新计算并重置分页
     }
-  } catch (e) {
-    console.error(e);
-  }
+  } catch (e) { console.error(e); }
 }
 
+// ===== 任务渲染逻辑 =====
 function loadAndFilterTasks() {
   const todayStr = fmtD(new Date());
   filteredTasks = { today: [], future: [], history: [] };
@@ -198,7 +197,6 @@ function loadAndFilterTasks() {
     }
   });
 
-  // 排序
   filteredTasks.future.sort((a,b) => (a.sample_time_parsed||"9999").localeCompare(b.sample_time_parsed||"9999"));
   filteredTasks.history.sort((a,b) => (b.sample_time_parsed||"0000").localeCompare(a.sample_time_parsed||"0000"));
 }
@@ -207,22 +205,30 @@ function renderTasks(resetPage = false) {
   try {
     if(resetPage) {
       pageState = { today: 1, future: 1, history: 1 };
-      taskList = getTasks(); // 重新读取
+      taskList = getTasks(); 
       loadAndFilterTasks();
     }
 
-    // 1. 渲染今日
+    // 1. 今日
     const elToday = document.getElementById('today-list-today');
     const todayData = filteredTasks.today;
     let htmlToday = todayData.length ? `<div class="group-title">今天 · ${todayData.length}</div>` : '';
-    htmlToday += todayData.slice(0, pageState.today * PAGE_SIZE).map(t => buildCard(t, false)).join('');
+    const showToday = todayData.slice(0, pageState.today * PAGE_SIZE);
+    htmlToday += showToday.map(t => buildCard(t, false)).join('');
+    if(todayData.length > showToday.length) {
+      htmlToday += `<button class="btn-loadmore" onclick="loadMore('today')">点击加载更多 (剩余 ${todayData.length - showToday.length} 条)</button>`;
+    }
     elToday.innerHTML = htmlToday;
     
-    // 2. 渲染未来
+    // 2. 未来
     const elFuture = document.getElementById('today-list-future');
     const futureData = filteredTasks.future;
     let htmlFuture = futureData.length ? `<div class="group-title future">未来 / 待定 · ${futureData.length}</div>` : '';
-    htmlFuture += futureData.slice(0, pageState.future * PAGE_SIZE).map(t => buildCard(t, false)).join('');
+    const showFuture = futureData.slice(0, pageState.future * PAGE_SIZE);
+    htmlFuture += showFuture.map(t => buildCard(t, false)).join('');
+    if(futureData.length > showFuture.length) {
+      htmlFuture += `<button class="btn-loadmore" onclick="loadMore('future')">点击加载更多 (剩余 ${futureData.length - showFuture.length} 条)</button>`;
+    }
     elFuture.innerHTML = htmlFuture;
 
     const elTodayEmpty = document.getElementById('today-empty');
@@ -232,10 +238,14 @@ function renderTasks(resetPage = false) {
       elTodayEmpty.classList.add('hidden');
     }
 
-    // 3. 渲染历史
+    // 3. 历史
     const elHistory = document.getElementById('history-list');
     const historyData = filteredTasks.history;
-    let htmlHistory = historyData.slice(0, pageState.history * PAGE_SIZE).map(t => buildCard(t, true)).join('');
+    const showHistory = historyData.slice(0, pageState.history * PAGE_SIZE);
+    let htmlHistory = showHistory.map(t => buildCard(t, true)).join('');
+    if(historyData.length > showHistory.length) {
+      htmlHistory += `<button class="btn-loadmore" onclick="loadMore('history')">点击加载更多 (剩余 ${historyData.length - showHistory.length} 条)</button>`;
+    }
     elHistory.innerHTML = htmlHistory;
 
     const elHistoryEmpty = document.getElementById('history-empty');
@@ -245,12 +255,9 @@ function renderTasks(resetPage = false) {
       elHistoryEmpty.classList.add('hidden');
     }
 
-  } catch (e) {
-    console.error("列表渲染失败", e);
-  }
+  } catch (e) { console.error("列表渲染失败", e); }
 }
 
-// 加载更多函数
 function loadMore(type) {
   pageState[type]++;
   renderTasks(false);
@@ -301,7 +308,7 @@ function openDetail(id) {
   } catch(e) { console.error(e); }
 }
 
-// ========== 数据工具 ==========
+// ===== 基础工具 =====
 function getTasks(){ 
   try { return JSON.parse(localStorage.getItem("tt_tasks") || "[]"); } catch(e) { return []; }
 }
@@ -358,7 +365,7 @@ function addOneDay(dateStr) {
   return fmtD(d);
 }
 
-// ========== 上传解析 ==========
+// ===== 上传解析 =====
 document.getElementById('excel-file').onchange = async function(e) {
   try {
     const file = e.target.files[0];
@@ -458,25 +465,9 @@ function doImport() {
     const rowDates = {};
     const dateColIndex = currentParsedData.headers.indexOf(mapping.expected_sample_time);
     
-    // 推算合并单元格日期
     if (doMergeDate && dateColIndex !== -1) {
       let lastValidDate = null, currentBlockDate = null;
       const colMerges = currentParsedData.merges.filter(m => m.s && m.s.c === dateColIndex);
       colMerges.sort((a,b) => a.s.r - b.s.r);
       
-      for (let i = 0; i < colMerges.length; i++) {
-        const merge = colMerges[i];
-        const startRow = merge.s.r, endRow = merge.e.r;
-        const dataIndex = startRow - 1; 
-        let val = null;
-        if (dataIndex >= 0 && dataIndex < currentParsedData.data.length) {
-            val = currentParsedData.data[dataIndex][mapping.expected_sample_time];
-        }
-        let parsedDate = parseTimeSafe(val);
-        
-        if (parsedDate) { 
-            currentBlockDate = parsedDate; 
-            lastValidDate = parsedDate; 
-        } else if (lastValidDate) { 
-            currentBlockDate = addOneDay(lastValidDate); 
-            lastValidDate = curren
+ 
