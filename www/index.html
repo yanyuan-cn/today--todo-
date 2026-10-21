@@ -130,7 +130,7 @@ input[type=text],input[type=file],input[type=date],select{width:100%;font-size:1
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid #eee;margin-bottom:12px;">
         <span style="font-weight:600">当前版本</span>
-        <span style="color:#666;font-size:14px">v1.0.1</span>
+        <span style="color:#666;font-size:14px">v1.0.2</span>
       </div>
       <button class="btn" id="btn-show-changelog" style="background:#fff;color:#2f6fed;border:1px solid #2f6fed;margin-top:0;">查看更新日志</button>
     </div>
@@ -169,7 +169,15 @@ input[type=text],input[type=file],input[type=date],select{width:100%;font-size:1
     <div class="changelog-title">更新日志</div>
     
     <div class="changelog-item">
-      <div class="changelog-ver">v1.0.1 (当前版本)</div>
+      <div class="changelog-ver">v1.0.2 (当前版本)</div>
+      <div class="changelog-desc">
+1. 修复：彻底解决因历史数据格式错乱导致软件点击无反应的BUG。
+2. 优化：在数据读取时增加全面容错处理。
+      </div>
+    </div>
+
+    <div class="changelog-item">
+      <div class="changelog-ver">v1.0.1</div>
       <div class="changelog-desc">
 1. 新增：完美支持复杂合并单元格的日期推算（含跨月跨年）。
 2. 新增：上传时可针对 Sheet（月份）、日期范围、指定人名进行精准前置过滤。
@@ -192,7 +200,12 @@ input[type=text],input[type=file],input[type=date],select{width:100%;font-size:1
 </div>
 
 <script>
-// 系统要求的字段
+// 全局异常捕获，防止页面死机
+window.onerror = function(msg, url, line) {
+  console.error("发生错误: " + msg + " 行号: " + line);
+  return false;
+};
+
 const FIELDS = [
   {k: "project", label: "项目"},
   {k: "batch_no", label: "批号"},
@@ -216,14 +229,22 @@ const ALIASES = {
 };
 
 let currentTab = 'tab-today';
-let excelData = null; // 存放当前读取的 workbook
-let currentParsedData = null; // 存放当前 sheet 的表头和数据体
+let excelData = null; 
+let currentParsedData = null; 
 
 /* ========== 基础存储 ========== */
 const DB = {
-  getTasks(){ return JSON.parse(localStorage.getItem("tt_tasks") || "[]"); },
+  getTasks(){ 
+    try {
+      return JSON.parse(localStorage.getItem("tt_tasks") || "[]"); 
+    } catch(e) { return []; }
+  },
   saveTasks(t){ localStorage.setItem("tt_tasks", JSON.stringify(t)); },
-  getLastMapping(){ return JSON.parse(localStorage.getItem("tt_mapping") || "{}"); },
+  getLastMapping(){ 
+    try {
+      return JSON.parse(localStorage.getItem("tt_mapping") || "{}"); 
+    } catch(e) { return {}; }
+  },
   saveLastMapping(m){ localStorage.setItem("tt_mapping", JSON.stringify(m)); }
 };
 
@@ -241,7 +262,6 @@ function fmtD(d){
 function esc(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
 function hash(s){ let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return (h>>>0).toString(16); }
 
-// 智能日期解析
 function parseTimeSafe(raw){
   if(raw == null || raw === "") return null;
   if(raw instanceof Date && !isNaN(raw)) return fmtD(raw);
@@ -260,11 +280,12 @@ function parseTimeSafe(raw){
   return null;
 }
 
-// 日期加1天
 function addOneDay(dateStr) {
   if(!dateStr) return null;
-  const parts = dateStr.split("-");
+  const parts = String(dateStr).split("-");
+  if(parts.length < 3) return null;
   let d = new Date(parts[0], parts[1]-1, parts[2]);
+  if(isNaN(d.getTime())) return null;
   d.setDate(d.getDate() + 1);
   return fmtD(d);
 }
@@ -295,10 +316,15 @@ function renderTasks(){
   const historyList = [];
 
   tasks.forEach(t => {
-    if(!t.sample_time_parsed) {
+    // 如果数据有问题，跳过
+    if(!t || !t.id) return;
+    
+    const parsedStr = t.sample_time_parsed ? String(t.sample_time_parsed) : null;
+
+    if(!parsedStr) {
       futureList.push(t); 
     } else {
-      const tDate = t.sample_time_parsed.slice(0,10);
+      const tDate = parsedStr.slice(0,10);
       if(tDate === todayStr) todayList.push(t);
       else if(tDate > todayStr) futureList.push(t);
       else historyList.push(t);
@@ -317,9 +343,9 @@ function renderTasks(){
     elToday.innerHTML = todayList.length ? `<div class="group-title">今天 · ${todayList.length}</div>` + todayList.map(t=>buildCard(t, false)).join('') : '';
     
     futureList.sort((a,b) => {
-      if(!a.sample_time_parsed) return 1;
-      if(!b.sample_time_parsed) return -1;
-      return a.sample_time_parsed.localeCompare(b.sample_time_parsed);
+      const aP = a.sample_time_parsed ? String(a.sample_time_parsed) : "9999";
+      const bP = b.sample_time_parsed ? String(b.sample_time_parsed) : "9999";
+      return aP.localeCompare(bP);
     });
     elFuture.innerHTML = futureList.length ? `<div class="group-title future">未来 / 待定 · ${futureList.length}</div>` + futureList.map(t=>buildCard(t, false)).join('') : '';
   }
@@ -331,7 +357,11 @@ function renderTasks(){
     elHistory.innerHTML = '';
   } else {
     elHistoryEmpty.classList.add('hidden');
-    historyList.sort((a,b) => b.sample_time_parsed.localeCompare(a.sample_time_parsed));
+    historyList.sort((a,b) => {
+      const aP = a.sample_time_parsed ? String(a.sample_time_parsed) : "0000";
+      const bP = b.sample_time_parsed ? String(b.sample_time_parsed) : "0000";
+      return bP.localeCompare(aP);
+    });
     elHistory.innerHTML = historyList.map(t=>buildCard(t, true)).join('');
   }
 }
@@ -346,7 +376,6 @@ function buildCard(t, isHistory) {
     statusHtml = `<div class="status-badge ${cls}">${esc(t.status)}</div>`;
   }
 
-  // 方案C：大标题为 项目 - 检项
   const mainTitle = `${esc(t.project || "未填项目")} - ${esc(t.item || "未填检项")}`;
 
   return `
@@ -364,10 +393,14 @@ function buildCard(t, isHistory) {
 /* ========== 二级详情页 ========== */
 function openDetail(id) {
   const tasks = DB.getTasks();
-  const t = tasks.find(x => x.id == id);
+  const t = tasks.find(x => String(x.id) === String(id));
   if(!t) return;
   
-  const rawObj = JSON.parse(t.raw_json || "{}");
+  let rawObj = {};
+  try {
+    rawObj = JSON.parse(t.raw_json || "{}");
+  } catch(e) { rawObj = {}; }
+
   let html = '';
   
   const sysKeys = [
@@ -384,7 +417,7 @@ function openDetail(id) {
   html += `<div style="font-size:12px;color:#999;margin-top:20px;margin-bottom:10px">表格原始数据：</div>`;
   for(let key in rawObj) {
     if(rawObj[key] != null && String(rawObj[key]).trim() !== ""){
-       if(sysKeys.some(sk => t[sk.k] === String(rawObj[key]))) continue; 
+       if(sysKeys.some(sk => String(t[sk.k]) === String(rawObj[key]))) continue; 
        html += `<div class="d-item"><div class="d-key">${esc(key)}</div><div class="d-val">${esc(rawObj[key])}</div></div>`;
     }
   }
@@ -397,32 +430,33 @@ function closeDetail() {
   document.getElementById('detail-modal').classList.add('hidden');
 }
 
-/* ========== 更新日志 ========== */
 document.getElementById('btn-show-changelog').onclick = () => {
   document.getElementById('changelog-modal').classList.remove('hidden');
 };
 
-
 /* ========== 上传与映射逻辑 ========== */
 document.getElementById('excel-file').onchange = async function(e) {
-  const file = e.target.files[0];
-  if(!file) return;
-  
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, {type:"array", cellDates:true});
-  excelData = wb;
-  
-  const selSheet = document.getElementById('sel-sheet');
-  selSheet.innerHTML = wb.SheetNames.map(name => `<option value="${name}">${name}</option>`).join('');
-  selSheet.disabled = false;
-  
-  document.getElementById('mapping-area').classList.add('hidden');
-  
-  // 如果有工作表，默认选中第一个并加载表头
-  if(wb.SheetNames.length > 0) {
-    loadSheetData(wb.SheetNames[0]);
+  try {
+    const file = e.target.files[0];
+    if(!file) return;
+    
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:"array", cellDates:true});
+    excelData = wb;
+    
+    const selSheet = document.getElementById('sel-sheet');
+    selSheet.innerHTML = wb.SheetNames.map(name => `<option value="${name}">${name}</option>`).join('');
+    selSheet.disabled = false;
+    
+    document.getElementById('mapping-area').classList.add('hidden');
+    
+    if(wb.SheetNames.length > 0) {
+      loadSheetData(wb.SheetNames[0]);
+    }
+    this.value = ""; 
+  } catch(err) {
+    alert("读取文件失败: " + err.message);
   }
-  this.value = ""; 
 };
 
 document.getElementById('sel-sheet').onchange = function() {
@@ -430,36 +464,35 @@ document.getElementById('sel-sheet').onchange = function() {
 };
 
 function loadSheetData(sheetName) {
-  if(!excelData || !sheetName) return;
-  const ws = excelData.Sheets[sheetName];
-  
-  // 读取所有行，不处理合并单元格，保留原始值
-  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, dateNF:"yyyy-mm-dd", defval:null});
-  if(!rows.length) return;
+  try {
+    if(!excelData || !sheetName) return;
+    const ws = excelData.Sheets[sheetName];
+    
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, dateNF:"yyyy-mm-dd", defval:null});
+    if(!rows.length) return;
 
-  // 处理表头
-  const seen = {};
-  const headers = rows[0].map((h,i)=>{
-    let n = (h==null||String(h).trim()==="") ? `列${i+1}` : String(h).trim();
-    if(seen[n]) { seen[n]++; n += `_${seen[n]}`; } else seen[n]=1;
-    return n;
-  });
+    const seen = {};
+    const headers = rows[0].map((h,i)=>{
+      let n = (h==null||String(h).trim()==="") ? `列${i+1}` : String(h).trim();
+      if(seen[n]) { seen[n]++; n += `_${seen[n]}`; } else seen[n]=1;
+      return n;
+    });
 
-  // 解析数据体
-  const data = [];
-  for(let i=1; i<rows.length; i++){
-    const r = rows[i];
-    if(r.every(v=>v==null||String(v).trim()==="")) continue;
-    const o = {};
-    headers.forEach((k, idx) => o[k] = r[idx] ?? null);
-    data.push(o);
+    const data = [];
+    for(let i=1; i<rows.length; i++){
+      const r = rows[i];
+      if(r.every(v=>v==null||String(v).trim()==="")) continue;
+      const o = {};
+      headers.forEach((k, idx) => o[k] = r[idx] ?? null);
+      data.push(o);
+    }
+
+    const merges = ws['!merges'] || [];
+    currentParsedData = { headers, data, merges };
+    renderMappingUI(headers);
+  } catch(err) {
+    alert("解析工作表出错: " + err.message);
   }
-
-  // 保存合并单元格信息
-  const merges = ws['!merges'] || [];
-  
-  currentParsedData = { headers, data, merges };
-  renderMappingUI(headers);
 }
 
 function renderMappingUI(headers) {
@@ -494,43 +527,17 @@ function renderMappingUI(headers) {
   document.getElementById('mapping-area').classList.remove('hidden');
 }
 
-// 核心解析逻辑
 document.getElementById('btn-confirm-import').onclick = () => {
-  if(!currentParsedData) return;
-  
-  const selects = document.querySelectorAll('#mapping-fields select');
-  const mapping = {};
-  selects.forEach(s => { if(s.value) mapping[s.dataset.key] = s.value; });
-  
-  if(!mapping.item) {
-    alert("请至少映射【检项】这一列，否则无法生成待办。");
-    return;
-  }
-  
-  const doMergeDate = document.getElementById('chk-merge-date').checked;
-  const filterStart = document.getElementById('filter-start').value;
-  const filterEnd = document.getElementById('filter-end').value;
-  const filterName = document.getElementById('filter-name').value.trim().toLowerCase();
-  
-  DB.saveLastMapping(mapping);
-
-  // 建立行号与日期的映射字典，用于处理合并单元格
-  const rowDates = {};
-  const dateColIndex = currentParsedData.headers.indexOf(mapping.expected_sample_time);
-  
-  if (doMergeDate && dateColIndex !== -1) {
-    let lastValidDate = null;
-    let currentBlockDate = null;
+  try {
+    if(!currentParsedData) return;
     
-    // 从合并单元格和实际数据中推断日期
-    // 1. 先获取所有的合并单元格块
-    const colMerges = currentParsedData.merges.filter(m => m.s.c === dateColIndex);
-    // 按起始行排序
-    colMerges.sort((a,b) => a.s.r - b.s.r);
+    const selects = document.querySelectorAll('#mapping-fields select');
+    const mapping = {};
+    selects.forEach(s => { if(s.value) mapping[s.dataset.key] = s.value; });
     
-    let lastMergeEndRow = 0;
+    if(!mapping.item) {
+      alert("请至少映射【检项】这一列，否则无法生成待办。");
+      return;
+    }
     
-    // 遍历合并块
-    for (let i = 0; i < colMerges.length; i++) {
-      const merge = colMerges[i];
-      const startRow = merge
+    const doMergeDate = document.getEleme
