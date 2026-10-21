@@ -2,283 +2,456 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#2f6fed">
 <title>今日待办</title>
 <script src="lib/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f6f8;color:#222;padding-bottom:40px}
-header{background:#fff;padding:14px 16px 10px;position:sticky;top:0;box-shadow:0 1px 4px rgba(0,0,0,.06);z-index:10}
-h1{font-size:18px;margin:0 0 10px}
-nav{display:flex;gap:8px}
-nav button{border:0;background:#eee;padding:6px 16px;border-radius:16px;font-size:14px;color:#444}
-nav button.active{background:#2f6fed;color:#fff}
-main{padding:12px}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f6f8;color:#222;padding-bottom:70px;padding-top:50px}
+header{background:#fff;position:fixed;top:0;left:0;right:0;height:50px;line-height:50px;text-align:center;font-size:18px;font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.06);z-index:100}
+main{padding:12px;min-height:100vh}
+.hidden{display:none!important}
+
+/* 底部导航 */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:60px;background:#fff;display:flex;box-shadow:0 -1px 4px rgba(0,0,0,.06);z-index:100;padding-bottom:env(safe-area-inset-bottom)}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#888;font-size:12px;gap:2px;cursor:pointer}
+.nav-item.active{color:#2f6fed}
+.nav-icon{font-size:20px;line-height:1}
+
+/* 通用卡片 */
 .card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
 .group-title{font-size:14px;color:#666;margin:18px 4px 8px;font-weight:600}
 .group-title.overdue{color:#e5484d}
+.group-title.future{color:#2f6fed}
+
+/* 任务卡片样式 */
 .task .t-top{display:flex;justify-content:space-between;gap:8px;font-size:15px}
-.task .t-top b{font-weight:600}
-.task .time{color:#666;font-size:13px;flex-shrink:0}
+.task .t-top b{font-weight:600;line-height:1.4}
+.task .time{color:#666;font-size:13px;flex-shrink:0;margin-top:2px}
 .task .time.red{color:#e5484d;font-weight:600}
-.task .t-sub{color:#555;font-size:13px;margin-top:4px}
+.task .t-sub{color:#555;font-size:13px;margin-top:6px}
 .task .t-people{color:#888;font-size:12px;margin-top:4px}
-.muted{color:#888}.small{font-size:12px}
-.mapping-view{margin:10px 0;border-top:1px dashed #eee;padding-top:8px}
-.mline{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0}
-.mline span:first-child{color:#888}
-.mline .bad{color:#e5484d}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.actions button{border:1px solid #ddd;background:#fff;padding:6px 12px;border-radius:8px;font-size:13px}
-.actions button.danger{color:#e5484d;border-color:#f3c2c2}
-.mapping-edit{margin-top:10px;border-top:1px dashed #eee;padding-top:8px}
-.mapping-edit select{font-size:13px;padding:4px;max-width:55%}
-#upload-form{background:#fff;border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-#upload-form input[type=text],#upload-form input[type=file]{width:100%;margin-bottom:10px;font-size:14px;padding:8px;border:1px solid #ddd;border-radius:8px;background:#fafafa}
-#upload-form button{width:100%;border:0;background:#2f6fed;color:#fff;padding:10px;border-radius:8px;font-size:15px}
-#upload-form button:disabled{opacity:.6}
+
+/* 我的页面及表单 */
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:13px;color:#666;margin-bottom:4px}
+input[type=text],input[type=file],select{width:100%;font-size:14px;padding:10px;border:1px solid #ddd;border-radius:8px;background:#fafafa;color:#333}
+.btn{width:100%;border:0;background:#2f6fed;color:#fff;padding:12px;border-radius:8px;font-size:15px;font-weight:600;margin-top:10px}
+.btn:disabled{opacity:.6}
+.btn-danger{background:#fff;color:#e5484d;border:1px solid #e5484d}
+
+/* 映射区域 */
+#mapping-area{background:#f8f9fa;border:1px dashed #ccc;border-radius:12px;padding:12px;margin-bottom:12px}
+.m-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:10px}
+.m-row span{font-size:14px;width:90px;color:#333;font-weight:500}
+.m-row select{flex:1;padding:8px}
+
+/* 详情页全屏弹窗 */
+#detail-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:#f5f6f8;z-index:200;overflow-y:auto}
+.detail-header{background:#fff;position:sticky;top:0;height:50px;display:flex;align-items:center;padding:0 16px;box-shadow:0 1px 4px rgba(0,0,0,.06);font-weight:600}
+.back-btn{font-size:16px;color:#2f6fed;margin-right:16px;cursor:pointer;padding:10px 10px 10px 0}
+.detail-content{padding:16px}
+.d-item{display:flex;border-bottom:1px solid #eee;padding:12px 0;font-size:14px}
+.d-key{width:100px;color:#888;flex-shrink:0}
+.d-val{color:#333;word-break:break-all}
+
 .empty{color:#999;text-align:center;padding:40px 0}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:99}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999}
 </style>
 </head>
 <body>
-<header>
-  <h1>今日待办</h1>
-  <nav>
-    <button data-tab="tasks" class="active">待办</button>
-    <button data-tab="docs">文档</button>
-  </nav>
-</header>
+
+<header id="app-title">今日待办</header>
+
 <main>
-  <section id="tab-tasks"><div id="task-groups"></div></section>
-  <section id="tab-docs" hidden>
-    <form id="upload-form">
-      <input type="text" name="name" placeholder="文档名称，如：检验任务表A" required>
-      <input type="file" name="file" accept=".xlsx,.xlsm" required>
-      <button type="submit">上传并解析</button>
-    </form>
-    <div id="doc-list"></div>
+  <!-- 今日待办 Tab -->
+  <section id="tab-today">
+    <div id="today-list-today"></div>
+    <div id="today-list-future"></div>
+    <div id="today-empty" class="empty hidden">今天暂无待办任务，休息一下吧~</div>
+  </section>
+
+  <!-- 历史待办 Tab -->
+  <section id="tab-history" class="hidden">
+    <div id="history-list"></div>
+    <div id="history-empty" class="empty hidden">暂无历史待办</div>
+  </section>
+
+  <!-- 我的 Tab -->
+  <section id="tab-mine" class="hidden">
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:12px">导入表格</div>
+      <input type="file" id="excel-file" accept=".xlsx,.xlsm">
+      
+      <!-- 映射配置区域（选完文件后出现） -->
+      <div id="mapping-area" class="hidden">
+        <div style="font-size:13px;color:#666;margin-bottom:10px">请选择表格列名与系统的对应关系：</div>
+        <div id="mapping-fields"></div>
+        <button class="btn" id="btn-confirm-import">确认并解析</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <button class="btn btn-danger" id="btn-clear-data">清空所有本地数据</button>
+    </div>
   </section>
 </main>
+
+<!-- 底部导航 -->
+<nav class="bottom-nav">
+  <div class="nav-item active" data-target="tab-today">
+    <span class="nav-icon">📅</span><span>今日待办</span>
+  </div>
+  <div class="nav-item" data-target="tab-history">
+    <span class="nav-icon">📁</span><span>历史待办</span>
+  </div>
+  <div class="nav-item" data-target="tab-mine">
+    <span class="nav-icon">👤</span><span>我的</span>
+  </div>
+</nav>
+
+<!-- 详情弹窗 -->
+<div id="detail-modal" class="hidden">
+  <div class="detail-header">
+    <div class="back-btn" onclick="closeDetail()">‹ 返回</div>
+    <div>任务详情</div>
+  </div>
+  <div class="detail-content" id="detail-body"></div>
+</div>
+
 <script>
-const FIELDS=[
-  ["project","项目"],["batch_no","批号"],["item","检项"],
-  ["expected_sample_time","预计送样时间"],["sample_sender","送样人"],
-  ["registrar","登记人"],["inspector","检验人员"]
+// 系统要求的字段及别名
+const FIELDS = [
+  {k: "project", label: "项目"},
+  {k: "batch_no", label: "批号"},
+  {k: "item", label: "检项"},
+  {k: "expected_sample_time", label: "送样时间"},
+  {k: "sample_sender", label: "送样人"},
+  {k: "registrar", label: "登记人"},
+  {k: "inspector", label: "检验人员"}
 ];
-const ALIASES={
-  project:["项目","项目名称"],
-  batch_no:["批号","批次","批次号"],
-  item:["检项","检验项目","检测项目"],
-  expected_sample_time:["预计送样时间","送样时间","预计送样"],
-  sample_sender:["送样人","送样"],
-  registrar:["登记人","登记"],
-  inspector:["检验人员","检验人","检验员"]
+
+const ALIASES = {
+  project: ["项目","项目名称"],
+  batch_no: ["批号","批次","批次号"],
+  item: ["检项","检验项目","检测项目"],
+  expected_sample_time: ["预计送样时间","送样时间","预计送样","送检时间"],
+  sample_sender: ["送样人","送样"],
+  registrar: ["登记人","登记"],
+  inspector: ["检验人员","检验人","检验员"]
 };
-let DOCS=[],TASKS=[];
-const S={
-  getDocs(){return JSON.parse(localStorage.getItem("tt_docs")||"[]")},
-  saveDocs(d){localStorage.setItem("tt_docs",JSON.stringify(d))},
-  getTasks(){return JSON.parse(localStorage.getItem("tt_tasks")||"[]")},
-  saveTasks(t){localStorage.setItem("tt_tasks",JSON.stringify(t))}
+
+let currentTab = 'tab-today';
+let currentParsedData = null; // 临时存放解析后的 Excel 表头和数据
+
+/* ========== 基础存储 ========== */
+const DB = {
+  getTasks(){ return JSON.parse(localStorage.getItem("tt_tasks") || "[]"); },
+  saveTasks(t){ localStorage.setItem("tt_tasks", JSON.stringify(t)); },
+  getLastMapping(){ return JSON.parse(localStorage.getItem("tt_mapping") || "{}"); },
+  saveLastMapping(m){ localStorage.setItem("tt_mapping", JSON.stringify(m)); }
 };
-function nextId(arr){return arr.length?Math.max(...arr.map(x=>x.id))+1:1}
-function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2500)}
-function hash(s){let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return (h>>>0).toString(16)}
-function fmtD(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+
+/* ========== 工具函数 ========== */
+function toast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+function fmtD(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function esc(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function hash(s){ let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return (h>>>0).toString(16); }
+
 function parseTimeSafe(raw){
-  if(raw==null||raw==="")return null;
-  if(raw instanceof Date&&!isNaN(raw))return fmtD(raw);
-  const s=String(raw).trim();if(!s)return null;
-  let m=s.match(/^(\d{1,2})月(\d{1,2})日?$/);
-  if(m)return `${new Date().getFullYear()}-${String(+m[1]).padStart(2,"0")}-${String(+m[2]).padStart(2,"0")}`;
-  m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
-  if(m)return `${m[1]}-${String(+m[2]).padStart(2,"0")}-${String(+m[3]).padStart(2,"0")}`;
-  const d=new Date(s);if(!isNaN(d))return fmtD(d);
+  if(raw == null || raw === "") return null;
+  if(raw instanceof Date && !isNaN(raw)) return fmtD(raw);
+  const s = String(raw).trim(); if(!s) return null;
+  let m = s.match(/^(\d{1,2})月(\d{1,2})日?$/);
+  if(m) return `${new Date().getFullYear()}-${String(+m[1]).padStart(2,"0")}-${String(+m[2]).padStart(2,"0")}`;
+  m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if(m) return `${m[1]}-${String(+m[2]).padStart(2,"0")}-${String(+m[3]).padStart(2,"0")}`;
+  const d = new Date(s); if(!isNaN(d)) return fmtD(d);
   return null;
 }
-function autoMap(cols){
-  const m={};
-  for(const [k,as] of Object.entries(ALIASES)) for(const a of as) if(cols.includes(a)){m[k]=a;break}
-  return m;
-}
-function readWorkbook(buf){
-  const wb=XLSX.read(buf,{type:"array",cellDates:true});
-  const ws=wb.Sheets[wb.SheetNames[0]];
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:"yyyy-mm-dd",defval:null});
-  if(!rows.length)return {columns:[],data:[]};
-  const seen={},header=rows[0].map((h,i)=>{
-    let n=(h==null||String(h).trim()==="")?`列${i+1}`:String(h).trim();
-    if(seen[n]){seen[n]++;n+=`_${seen[n]}`}else seen[n]=1;
-    return n;
-  });
-  const data=[];
-  for(let i=1;i<rows.length;i++){
-    const r=rows[i];if(r.every(v=>v==null||String(v).trim()===""))continue;
-    const o={};header.forEach((k,idx)=>o[k]=r[idx]??null);data.push(o);
-  }
-  return {columns:header,data};
-}
-function applyMapping(docId,mapping,rows){
-  const keep=S.getTasks().filter(t=>t.doc_id!==docId);
-  const fresh=[];let id=nextId(keep);
-  const seen=new Set();
-  for(const row of rows){
-    const item=String(row[mapping.item]||"").trim();if(!item)continue;
-    const project=String(row[mapping.project]||"").trim();
-    const batch=String(row[mapping.batch_no]||"").trim();
-    const key=hash(`${project}|${batch}|${item}`);
-    if(seen.has(key))continue;seen.add(key);
-    const rawTime=row[mapping.expected_sample_time];
-    fresh.push({
-      id:id++,doc_id:docId,row_key:key,
-      project,batch_no:batch,item,
-      sample_time_raw:rawTime==null?"":(rawTime instanceof Date?fmtD(rawTime):String(rawTime)),
-      sample_time_parsed:parseTimeSafe(rawTime),
-      sample_sender:String(row[mapping.sample_sender]||""),
-      registrar:String(row[mapping.registrar]||""),
-      inspector:String(row[mapping.inspector]||""),
-      raw_json:JSON.stringify(row),
-      updated_at:new Date().toISOString()
-    });
-  }
-  S.saveTasks([...keep,...fresh]);
-  const docs=S.getDocs();const d=docs.find(x=>x.id===docId);
-  if(d){d.last_sync_at=new Date().toISOString();S.saveDocs(docs)}
-}
-document.getElementById("upload-form").onsubmit=async e=>{
-  e.preventDefault();
-  const btn=e.target.querySelector("button");btn.disabled=true;btn.textContent="解析中...";
-  try{
-    const name=e.target.name.value.trim();
-    const file=e.target.file.files[0];if(!file)return;
-    const buf=await file.arrayBuffer();
-    const {columns,data}=readWorkbook(buf);
-    if(!columns.length)throw new Error("表格为空");
-    const mapping=autoMap(columns);
-    const docs=S.getDocs();const id=nextId(docs);
-    docs.push({id,name,columns,mapping,last_sync_at:new Date().toISOString()});
-    S.saveDocs(docs);
-    applyMapping(id,mapping,data);
-    e.target.reset();
-    loadDocs();loadTasks();
-    toast(`已导入：${columns.length} 列，匹配 ${Object.keys(mapping).length} 个字段`);
-  }catch(err){alert("解析失败："+err.message)}
-  finally{btn.disabled=false;btn.textContent="上传并解析"}
-};
-document.querySelectorAll("nav button").forEach(b=>{
-  b.onclick=()=>{
-    document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
-    b.classList.add("active");
-    const t=b.dataset.tab;
-    document.getElementById("tab-tasks").hidden=t!=="tasks";
-    document.getElementById("tab-docs").hidden=t!=="docs";
-    t==="tasks"?loadTasks():loadDocs();
+
+/* ========== Tab 切换 ========== */
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+    btn.classList.add('active');
+    currentTab = btn.dataset.target;
+    document.getElementById(currentTab).classList.remove('hidden');
+    
+    const titles = {"tab-today":"今日待办","tab-history":"历史待办","tab-mine":"我的"};
+    document.getElementById('app-title').textContent = titles[currentTab];
+
+    if(currentTab === 'tab-today' || currentTab === 'tab-history') renderTasks();
   };
 });
-function loadDocs(){DOCS=S.getDocs();renderDocs()}
-function renderDocs(){
-  const el=document.getElementById("doc-list");
-  if(!DOCS.length){el.innerHTML='<p class="empty">还没有文档，先上传一个 xlsx</p>';return}
-  el.innerHTML=DOCS.map(d=>{
-    const rows=FIELDS.map(([k,l])=>{
-      const v=d.mapping[k]||"—";
-      return `<div class="mline"><span>${l}</span><span class="${d.mapping[k]?"":"bad"}">${esc(v)}</span></div>`;
-    }).join("");
-    return `<div class="card" data-id="${d.id}">
-      <div><b>${esc(d.name)}</b></div>
-      <div class="muted small" style="margin-top:4px">最近同步：${esc((d.last_sync_at||"").slice(0,16).replace("T"," ")||"未同步")}</div>
-      <div class="mapping-view">${rows}</div>
-      <div class="actions">
-        <button data-act="edit" data-id="${d.id}">编辑映射</button>
-        <button data-act="replace" data-id="${d.id}">更新表格</button>
-        <button data-act="del" data-id="${d.id}" class="danger">删除</button>
-      </div>
-      <div class="mapping-edit" hidden></div>
-      <input type="file" accept=".xlsx,.xlsm" hidden data-replace="${d.id}">
-    </div>`;
-  }).join("");
-}
-document.getElementById("doc-list").addEventListener("click",e=>{
-  const btn=e.target.closest("button");if(!btn)return;
-  const act=btn.dataset.act,id=+btn.dataset.id;
-  const doc=DOCS.find(x=>x.id===id);if(!doc)return;
-  if(act==="edit"){
-    const box=document.querySelector(`.card[data-id="${id}"] .mapping-edit`);
-    if(!box.hidden){box.hidden=true;box.innerHTML="";return}
-    box.hidden=false;
-    box.innerHTML=FIELDS.map(([k,l])=>`
-      <label class="mline"><span>${l}</span>
-        <select data-key="${k}">
-          <option value="">（不映射）</option>
-          ${doc.columns.map(c=>`<option value="${esc(c)}" ${doc.mapping[k]===c?"selected":""}>${esc(c)}</option>`).join("")}
-        </select></label>`).join("")+
-      `<button data-act="save" data-id="${id}" style="margin-top:8px;width:100%;border:0;background:#2f6fed;color:#fff;padding:9px;border-radius:8px">保存并重新解析</button>`;
-  }
-  else if(act==="save"){
-    const card=btn.closest(".card");const mapping={};
-    card.querySelectorAll(".mapping-edit select").forEach(s=>{if(s.value)mapping[s.dataset.key]=s.value});
-    const docs=S.getDocs();const d=docs.find(x=>x.id===id);d.mapping=mapping;S.saveDocs(docs);
-    const rows=S.getTasks().filter(t=>t.doc_id===id).map(t=>JSON.parse(t.raw_json));
-    applyMapping(id,mapping,rows);
-    loadDocs();loadTasks();toast("映射已更新");
-  }
-  else if(act==="replace"){document.querySelector(`input[data-replace="${id}"]`).click()}
-  else if(act==="del"){
-    if(!confirm("确定删除该文档及其任务？"))return;
-    S.saveTasks(S.getTasks().filter(t=>t.doc_id!==id));
-    S.saveDocs(S.getDocs().filter(d=>d.id!==id));
-    loadDocs();loadTasks();
-  }
-});
-document.getElementById("doc-list").addEventListener("change",async e=>{
-  const inp=e.target.closest("input[data-replace]");if(!inp)return;
-  const id=+inp.dataset.replace;const f=inp.files[0];if(!f)return;
-  const docs=S.getDocs();const d=docs.find(x=>x.id===id);if(!d)return;
-  const buf=await f.arrayBuffer();
-  const {columns,data}=readWorkbook(buf);
-  d.columns=columns;d.mapping=autoMap(columns);d.last_sync_at=new Date().toISOString();
-  S.saveDocs(docs);
-  applyMapping(id,d.mapping,data);
-  inp.value="";
-  loadDocs();loadTasks();toast("表格已更新");
-});
-function loadTasks(){TASKS=S.getTasks();renderTasks()}
+
+/* ========== 渲染任务列表 ========== */
 function renderTasks(){
-  const today=new Date();today.setHours(0,0,0,0);
-  const todayStr=fmtD(today);
-  const weekEnd=new Date(today);weekEnd.setDate(weekEnd.getDate()+7);
-  const g={overdue:[],today:[],week:[],later:[],none:[]};
-  TASKS.forEach(t=>{
-    if(!t.sample_time_parsed){g.none.push(t);return}
-    const ds=t.sample_time_parsed.slice(0,10);
-    const dt=new Date(ds+"T00:00:00");
-    if(dt<today)g.overdue.push(t);
-    else if(ds===todayStr)g.today.push(t);
-    else if(dt<=weekEnd)g.week.push(t);
-    else g.later.push(t);
+  const tasks = DB.getTasks();
+  const todayStr = fmtD(new Date());
+  
+  const todayList = [];
+  const futureList = [];
+  const historyList = [];
+
+  tasks.forEach(t => {
+    if(!t.sample_time_parsed) {
+      futureList.push(t); // 无日期归入未来预告
+    } else {
+      const tDate = t.sample_time_parsed.slice(0,10);
+      if(tDate === todayStr) todayList.push(t);
+      else if(tDate > todayStr) futureList.push(t);
+      else historyList.push(t);
+    }
   });
-  const order=[["overdue","逾期",true],["today","今天",false],["week","本周",false],["later","以后",false],["none","无日期",false]];
-  let html="";
-  order.forEach(([k,title,red])=>{
-    const list=g[k];if(!list.length)return;
-    html+=`<div class="group-title ${red?"overdue":""}">${title} · ${list.length}</div>`;
-    html+=list.map(t=>{
-      const people=[t.sample_sender&&`送样 ${esc(t.sample_sender)}`,t.registrar&&`登记 ${esc(t.registrar)}`,t.inspector&&`检验 ${esc(t.inspector)}`].filter(Boolean).join(" · ");
-      const parsed=t.sample_time_parsed?`<span class="small muted">→ ${esc(t.sample_time_parsed)}</span>`:`<span class="small muted">→ 无法解析，仅显示原文</span>`;
-      return `<div class="card task">
-        <div class="t-top"><b>${esc(t.item||"—")}</b><span class="time ${red?"red":""}">${esc(t.sample_time_raw||"—")}</span></div>
-        <div class="t-sub">${esc(t.project||"")}${t.batch_no?" · 批号 "+esc(t.batch_no):""}</div>
-        ${people?`<div class="t-people">${people}</div>`:""}
-        <div style="margin-top:4px">${parsed}</div>
-      </div>`;
-    }).join("");
-  });
-  document.getElementById("task-groups").innerHTML=html||'<p class="empty">暂无任务，先去「文档」上传一个 xlsx</p>';
+
+  // 渲染今日
+  const elToday = document.getElementById('today-list-today');
+  const elFuture = document.getElementById('today-list-future');
+  const elTodayEmpty = document.getElementById('today-empty');
+  
+  if(todayList.length === 0 && futureList.length === 0){
+    elTodayEmpty.classList.remove('hidden');
+    elToday.innerHTML = ''; elFuture.innerHTML = '';
+  } else {
+    elTodayEmpty.classList.add('hidden');
+    elToday.innerHTML = todayList.length ? `<div class="group-title">今天 · ${todayList.length}</div>` + todayList.map(t=>buildCard(t, false)).join('') : '';
+    
+    // 未来预告按时间排序
+    futureList.sort((a,b) => {
+      if(!a.sample_time_parsed) return 1;
+      if(!b.sample_time_parsed) return -1;
+      return a.sample_time_parsed.localeCompare(b.sample_time_parsed);
+    });
+    elFuture.innerHTML = futureList.length ? `<div class="group-title future">未来预告 · ${futureList.length}</div>` + futureList.map(t=>buildCard(t, false)).join('') : '';
+  }
+
+  // 渲染历史
+  const elHistory = document.getElementById('history-list');
+  const elHistoryEmpty = document.getElementById('history-empty');
+  if(historyList.length === 0){
+    elHistoryEmpty.classList.remove('hidden');
+    elHistory.innerHTML = '';
+  } else {
+    elHistoryEmpty.classList.add('hidden');
+    historyList.sort((a,b) => b.sample_time_parsed.localeCompare(a.sample_time_parsed));
+    elHistory.innerHTML = historyList.map(t=>buildCard(t, true)).join('');
+  }
 }
-loadTasks();loadDocs();
+
+function buildCard(t, isHistory) {
+  const timeDisplay = t.sample_time_raw || "未填时间";
+  return `
+    <div class="card task" onclick="openDetail('${t.id}')">
+      <div class="t-top">
+        <b>${esc(t.item || "未命名检项")}</b>
+        <span class="time ${isHistory?'':'red'}">${esc(timeDisplay)}</span>
+      </div>
+      <div class="t-sub">项目：${esc(t.project||"—")}</div>
+      <div class="t-people">送样人：${esc(t.sample_sender||"—")}</div>
+    </div>
+  `;
+}
+
+/* ========== 二级详情页 ========== */
+function openDetail(id) {
+  const tasks = DB.getTasks();
+  const t = tasks.find(x => x.id == id);
+  if(!t) return;
+  
+  const rawObj = JSON.parse(t.raw_json || "{}");
+  let html = '';
+  
+  // 1. 展示系统关键字段
+  const sysKeys = [
+    {k:"item", l:"检项"}, {k:"project", l:"项目"}, {k:"batch_no", l:"批号"},
+    {k:"sample_time_raw", l:"送样时间"}, {k:"sample_sender", l:"送样人"},
+    {k:"registrar", l:"登记人"}, {k:"inspector", l:"检验人员"}
+  ];
+  sysKeys.forEach(k => {
+    html += `<div class="d-item"><div class="d-key">${k.l}</div><div class="d-val">${esc(t[k.k]||"—")}</div></div>`;
+  });
+
+  // 2. 展示该行 Excel 的其他所有列
+  html += `<div style="font-size:12px;color:#999;margin-top:20px;margin-bottom:10px">表格原始数据：</div>`;
+  for(let key in rawObj) {
+    if(rawObj[key] != null && String(rawObj[key]).trim() !== ""){
+       html += `<div class="d-item"><div class="d-key">${esc(key)}</div><div class="d-val">${esc(rawObj[key])}</div></div>`;
+    }
+  }
+
+  document.getElementById('detail-body').innerHTML = html;
+  document.getElementById('detail-modal').classList.remove('hidden');
+}
+
+function closeDetail() {
+  document.getElementById('detail-modal').classList.add('hidden');
+}
+
+/* ========== 上传与映射逻辑 ========== */
+document.getElementById('excel-file').onchange = async function(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:"array", cellDates:true});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, dateNF:"yyyy-mm-dd", defval:null});
+  
+  if(!rows.length) {
+    toast("表格为空");
+    this.value = "";
+    return;
+  }
+
+  const seen = {};
+  const headers = rows[0].map((h,i)=>{
+    let n = (h==null||String(h).trim()==="") ? `列${i+1}` : String(h).trim();
+    if(seen[n]) { seen[n]++; n += `_${seen[n]}`; } else seen[n]=1;
+    return n;
+  });
+
+  // 解析数据体
+  const data = [];
+  for(let i=1; i<rows.length; i++){
+    const r = rows[i];
+    if(r.every(v=>v==null||String(v).trim()==="")) continue;
+    const o = {};
+    headers.forEach((k, idx) => o[k] = r[idx] ?? null);
+    data.push(o);
+  }
+
+  currentParsedData = { headers, data };
+  
+  // 显示映射界面
+  renderMappingUI(headers);
+  this.value = ""; 
+};
+
+function renderMappingUI(headers) {
+  const lastMapping = DB.getLastMapping();
+  const container = document.getElementById('mapping-fields');
+  
+  let html = '';
+  FIELDS.forEach(f => {
+    // 尝试自动匹配：1.上次记录 2.预设别名 3.表头完全一致
+    let autoSelect = "";
+    if(lastMapping[f.k] && headers.includes(lastMapping[f.k])) {
+      autoSelect = lastMapping[f.k];
+    } else {
+      const aliases = ALIASES[f.k];
+      for(let a of aliases) {
+        if(headers.includes(a)) { autoSelect = a; break; }
+      }
+    }
+
+    html += `
+      <div class="m-row">
+        <span>${f.label}</span>
+        <select data-key="${f.k}">
+          <option value="">（不映射）</option>
+          ${headers.map(h => `<option value="${esc(h)}" ${autoSelect===h?'selected':''}>${esc(h)}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+  document.getElementById('mapping-area').classList.remove('hidden');
+}
+
+document.getElementById('btn-confirm-import').onclick = () => {
+  if(!currentParsedData) return;
+  
+  const selects = document.querySelectorAll('#mapping-fields select');
+  const mapping = {};
+  selects.forEach(s => { if(s.value) mapping[s.dataset.key] = s.value; });
+  
+  if(!mapping.item) {
+    alert("请至少映射【检项】这一列，否则无法生成待办。");
+    return;
+  }
+  
+  DB.saveLastMapping(mapping);
+  
+  // 开始处理数据：增量更新，冻结历史
+  const tasks = DB.getTasks();
+  const todayStr = fmtD(new Date());
+  const taskMap = new Map(tasks.map(t => [t.row_key, t])); // 使用 Map 便于快速查找更新
+  
+  let newCount = 0;
+  let frozenCount = 0;
+
+  currentParsedData.data.forEach(row => {
+    const item = String(row[mapping.item] || "").trim();
+    if(!item) return;
+
+    const project = String(row[mapping.project] || "").trim();
+    const batch = String(row[mapping.batch_no] || "").trim();
+    const key = hash(`${project}|${batch}|${item}`);
+    
+    const rawTime = row[mapping.expected_sample_time];
+    const parsedTime = parseTimeSafe(rawTime);
+
+    const existing = taskMap.get(key);
+    
+    // 如果已经存在，且是“历史任务”（日期已经小于今天），则冻结不更新
+    if(existing && existing.sample_time_parsed && existing.sample_time_parsed.slice(0,10) < todayStr) {
+      frozenCount++;
+      return; 
+    }
+
+    // 生成或更新任务
+    const id = existing ? existing.id : Date.now() + Math.random().toString(36).substr(2, 5);
+    const newTask = {
+      id, 
+      row_key: key,
+      project, batch_no: batch, item,
+      sample_time_raw: rawTime == null ? "" : String(rawTime),
+      sample_time_parsed: parsedTime,
+      sample_sender: String(row[mapping.sample_sender] || ""),
+      registrar: String(row[mapping.registrar] || ""),
+      inspector: String(row[mapping.inspector] || ""),
+      raw_json: JSON.stringify(row),
+      updated_at: new Date().toISOString()
+    };
+    
+    if(!existing) newCount++;
+    taskMap.set(key, newTask);
+  });
+
+  // 存回数据库
+  DB.saveTasks(Array.from(taskMap.values()));
+  
+  // 收起界面并提示
+  document.getElementById('mapping-area').classList.add('hidden');
+  toast(`解析完成：新增 ${newCount} 条，更新若干，保留历史 ${frozenCount} 条`);
+  
+  // 自动切回今日待办
+  document.querySelector('.nav-item[data-target="tab-today"]').click();
+};
+
+document.getElementById('btn-clear-data').onclick = () => {
+  if(confirm("警告：这会清空手机里所有已保存的待办数据（包含历史），且无法恢复。确定要清空吗？")){
+    localStorage.removeItem("tt_tasks");
+    localStorage.removeItem("tt_mapping");
+    renderTasks();
+    toast("数据已清空");
+  }
+};
+
+/* ========== 初始化 ========== */
+renderTasks();
 </script>
 </body>
 </html>
