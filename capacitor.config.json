@@ -1,0 +1,6 @@
+{
+  "appId": "com.personal.todaytodo",
+  "appName": "今日待办",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
